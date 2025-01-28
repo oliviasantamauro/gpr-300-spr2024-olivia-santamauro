@@ -43,18 +43,38 @@ struct FrameBuffer {
 } framebuffer;
 
 
+struct FullscreenQuad {
+	GLuint vao;
+	GLuint vbo;
+} fullscreen_quad;
+
+static float quad_vertices[] = {
+	// pos (x, y) texcoord (u, v)
+	-1.0f,  1.0f, 0.0f, 1.0f,
+	-1.0f, -1.0f, 0.0f, 0.0f,
+	 1.0f, -1.0f, 1.0f, 0.0f,
+
+	-1.0f,  1.0f, 0.0f, 1.0f,
+	 1.0f, -1.0f, 1.0f, 0.0f,
+	 1.0f,  1.0f, 1.0f, 1.0f,
+};
+
 int main() {
-	GLFWwindow* window = initWindow("Assignment 0", screenWidth, screenHeight);
+	GLFWwindow* window = initWindow("Assignment 1", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
 	ew::Shader litShader = ew::Shader("assets/lit.vert", "assets/lit.frag");
+	ew::Shader fullscreenShader = ew::Shader("assets/fullscreen.vert", "assets/fullscreen.frag");
+	ew::Shader inverseShader = ew::Shader("assets/fullscreen.vert", "assets/inverse.frag");
+	ew::Shader greyscaleShader = ew::Shader("assets/fullscreen.vert", "assets/greyscale.frag");
+	ew::Shader blurShader = ew::Shader("assets/fullscreen.vert", "assets/blur.frag");
+	ew::Shader chromaticShader = ew::Shader("assets/fullscreen.vert", "assets/chromatic.frag");
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
 	ew::Transform monkeyTransform;
 
 	//Culling
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
-	glEnable(GL_DEPTH_TEST);
 
 	//Camera
 	camera.position = glm::vec3(0.0f, 0.0f, 5.0f);
@@ -62,32 +82,50 @@ int main() {
 	camera.aspectRatio = (float)screenWidth / screenHeight;
 	camera.fov = 60.0f;
 
-	//Textures
-	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, brickTexture);
+	// initialize fullscreen quad
+	glGenVertexArrays(1, &fullscreen_quad.vao);
+	glBindVertexArray(fullscreen_quad.vao);
+	{
+		glGenBuffers(1, &fullscreen_quad.vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, fullscreen_quad.vbo);
+
+		//buffer data to vbo
+		glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), &quad_vertices, GL_STATIC_DRAW);
+
+		glEnableVertexAttribArray(0); //positions
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)0);
+		glEnableVertexAttribArray(1); //tex coords
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+	}
+	glBindVertexArray(0);
+
 
 	// initialize framebuffer
 	glGenFramebuffers(1, &framebuffer.fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
+	{
 
-	// color attachment
-	glGenTextures(1, &framebuffer.color0);
-	glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		// color attachment
+		glGenTextures(1, &framebuffer.color0);
+		glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.color0, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.color0, 0);
 
-	// check completeness
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-		printf("framebuffer incomplete\n");
-		return 0;
+		// check completeness
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			printf("framebuffer incomplete\n");
+			return 0;
+		}
 	}
-
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+	//Textures
+	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, brickTexture);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -99,22 +137,42 @@ int main() {
 
 		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0, 1.0, 0.0));
 
-		//RENDER
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+		//RENDER to framebuffer
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
+		{
+			glEnable(GL_DEPTH_TEST);
+			glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			
 
-		litShader.use();
+			litShader.use();
 
-		litShader.setFloat("_Material.Ka", material.Ka);
-		litShader.setFloat("_Material.Kd", material.Kd);
-		litShader.setFloat("_Material.Ks", material.Ks);
-		litShader.setFloat("_Material.Shininess", material.Shininess);
+			litShader.setFloat("_Material.Ka", material.Ka);
+			litShader.setFloat("_Material.Kd", material.Kd);
+			litShader.setFloat("_Material.Ks", material.Ks);
+			litShader.setFloat("_Material.Shininess", material.Shininess);
 
-		litShader.setVec3("_EyePos", camera.position);
-		litShader.setInt("_MainTex", 0);
-		litShader.setMat4("model", monkeyTransform.modelMatrix());
-		litShader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
-		suzanne.draw();
+			litShader.setVec3("_EyePos", camera.position);
+			litShader.setInt("_MainTex", 0);
+			litShader.setMat4("model", monkeyTransform.modelMatrix());
+			litShader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
+			suzanne.draw();
+		}
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		// render to default buffer
+		glDisable(GL_DEPTH_TEST);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		// render fullscreen quad
+		chromaticShader.use();
+		chromaticShader.setInt("texture0", 1);
+		glBindVertexArray(fullscreen_quad.vao);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glBindVertexArray(0);
 
 		drawUI();
 
@@ -135,7 +193,6 @@ void drawUI() {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui::NewFrame();
 	
-
 	ImGui::Begin("Settings");
 	if (ImGui::CollapsingHeader("Camera")) {
 		if (ImGui::Button("Reset Camera")) {
@@ -143,13 +200,16 @@ void drawUI() {
 		}
 		ImGui::SliderFloat("FOV", &camera.fov, 0.0f, 120.0f);
 	}
-
 	if (ImGui::CollapsingHeader("Material")) {
 		ImGui::SliderFloat("AmbientK", &material.Ka, 0.0f, 1.0f);
 		ImGui::SliderFloat("DiffuseK", &material.Kd, 0.0f, 1.0f);
 		ImGui::SliderFloat("SpecularK", &material.Ks, 0.0f, 1.0f);
 		ImGui::SliderFloat("Shininess", &material.Shininess, 2.0f, 1024.0f);
 	}
+	ImGui::End();
+
+	ImGui::Begin("Fullscreen");
+	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color0, ImVec2(800, 600));
 	ImGui::End();
 
 	ImGui::Render();
