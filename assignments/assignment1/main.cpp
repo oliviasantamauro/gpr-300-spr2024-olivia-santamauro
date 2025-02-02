@@ -28,6 +28,7 @@ float deltaTime;
 ew::Camera camera;
 ew::CameraController cameraController;
 
+//lit shader
 struct Material {
 	float Ka = 1.0;
 	float Kd = 0.5;
@@ -35,6 +36,8 @@ struct Material {
 	float Shininess = 128;
 }material;
 
+
+//Framebuffer
 struct FrameBuffer {
 	GLuint fbo;
 	GLuint color0;
@@ -59,6 +62,40 @@ static float quad_vertices[] = {
 	 1.0f,  1.0f, 1.0f, 1.0f,
 };
 
+static int effect_index = 0;
+static std::vector<std::string> post_processing_effects = {
+	"None",
+	"Grayscale",
+	"Kernel Blur",
+	"Inverse",
+	"Chromatic Aberration",
+};
+
+void render(ew::Shader shader, ew::Model model, ew::Transform transform) {
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
+	{
+		glEnable(GL_DEPTH_TEST);
+		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+		shader.use();
+
+		shader.setFloat("_Material.Ka", material.Ka);
+		shader.setFloat("_Material.Kd", material.Kd);
+		shader.setFloat("_Material.Ks", material.Ks);
+		shader.setFloat("_Material.Shininess", material.Shininess);
+
+		shader.setVec3("_EyePos", camera.position);
+		shader.setInt("_MainTex", 0);
+		shader.setMat4("model", transform.modelMatrix());
+		shader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
+		model.draw();
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+
 int main() {
 	GLFWwindow* window = initWindow("Assignment 1", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
@@ -66,7 +103,7 @@ int main() {
 	ew::Shader litShader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader fullscreenShader = ew::Shader("assets/fullscreen.vert", "assets/fullscreen.frag");
 	ew::Shader inverseShader = ew::Shader("assets/fullscreen.vert", "assets/inverse.frag");
-	ew::Shader greyscaleShader = ew::Shader("assets/fullscreen.vert", "assets/greyscale.frag");
+	ew::Shader grayscaleShader = ew::Shader("assets/fullscreen.vert", "assets/greyscale.frag");
 	ew::Shader blurShader = ew::Shader("assets/fullscreen.vert", "assets/blur.frag");
 	ew::Shader chromaticShader = ew::Shader("assets/fullscreen.vert", "assets/chromatic.frag");
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
@@ -138,27 +175,7 @@ int main() {
 		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0, 1.0, 0.0));
 
 		//RENDER to framebuffer
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
-		{
-			glEnable(GL_DEPTH_TEST);
-			glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			
-
-			litShader.use();
-
-			litShader.setFloat("_Material.Ka", material.Ka);
-			litShader.setFloat("_Material.Kd", material.Kd);
-			litShader.setFloat("_Material.Ks", material.Ks);
-			litShader.setFloat("_Material.Shininess", material.Shininess);
-
-			litShader.setVec3("_EyePos", camera.position);
-			litShader.setInt("_MainTex", 0);
-			litShader.setMat4("model", monkeyTransform.modelMatrix());
-			litShader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
-			suzanne.draw();
-		}
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		render(litShader, suzanne, monkeyTransform);
 
 		// render to default buffer
 		glDisable(GL_DEPTH_TEST);
@@ -166,12 +183,36 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// render fullscreen quad
-		chromaticShader.use();
-		chromaticShader.setInt("texture0", 1);
+		switch (effect_index)
+		{
+		case 1:
+			grayscaleShader.use();
+			grayscaleShader.setInt("texture0", 1);
+			break;
+		case 2:
+			blurShader.use();
+			blurShader.setInt("texture0", 1);
+			break;
+		case 3:
+			inverseShader.use();
+			inverseShader.setInt("texture0", 1);
+			break;
+		case 4:
+			chromaticShader.use();
+			chromaticShader.setInt("texture0", 1);
+			break;
+		default:
+			fullscreenShader.use();
+			fullscreenShader.setInt("texture0", 1);
+			break;
+		}
+
 		glBindVertexArray(fullscreen_quad.vao);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
-		glDrawArrays(GL_TRIANGLES, 0, 6);
+		{
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
+			glDrawArrays(GL_TRIANGLES, 0, 6);
+		}
 		glBindVertexArray(0);
 
 		drawUI();
@@ -211,6 +252,23 @@ void drawUI() {
 	ImGui::Begin("Fullscreen");
 	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color0, ImVec2(800, 600));
 	ImGui::End();
+
+	if (ImGui::BeginCombo("Effect", post_processing_effects[effect_index].c_str()))
+	{
+		for (auto n = 0; n < post_processing_effects.size(); ++n)
+		{
+			auto is_selected = (post_processing_effects[effect_index] == post_processing_effects[n]);
+			if (ImGui::Selectable(post_processing_effects[n].c_str(), is_selected))
+			{
+				effect_index = n;
+			}
+			if (is_selected)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
+		}
+		ImGui::EndCombo();
+	}
 
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
