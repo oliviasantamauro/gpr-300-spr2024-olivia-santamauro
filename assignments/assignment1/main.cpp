@@ -43,9 +43,12 @@ struct FrameBuffer {
 	GLuint color0;
 	GLuint brightness;
 	GLuint depth;
-} framebuffer, pingpong[2];
+} framebuffer;
 
-
+struct PingPongBuffer {
+	GLuint fbo[2];
+	GLuint color[2];
+} pingpongbuffer;
 
 struct FullscreenQuad {
 	GLuint vao;
@@ -178,6 +181,27 @@ int main() {
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+	// initialize pingpong buffer
+	glGenFramebuffers(2, pingpongbuffer.fbo);
+	glGenTextures(2, pingpongbuffer.color);
+	for (unsigned int i = 0; i < 2; i++)
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, pingpongbuffer.fbo[i]);
+		glBindTexture(GL_TEXTURE_2D, pingpongbuffer.color[i]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 800, 600, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			printf("framebuffer incomplete\n");
+			return 0;
+		}
+
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongbuffer.color[i], 0);
+	}
+
 	//Textures
 	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
 
@@ -223,23 +247,61 @@ int main() {
 			hdrShader.use();
 			hdrShader.setInt("texture0", 0);
 			break;
-		case 6:
+		case 6: {
+			bool horizontal = true, first_iteration = true;
+			int amount = 10;
+			blurShader.use();
+			blurShader.setInt("texture0", 0);
+			for (unsigned int i = 0; i < amount; i++)
+			{
+				glBindFramebuffer(GL_FRAMEBUFFER, pingpongbuffer.fbo[horizontal]);
+
+				// render to fullscreen quad
+				glBindVertexArray(fullscreen_quad.vao);
+				{
+					glActiveTexture(GL_TEXTURE0);
+					glBindTexture(GL_TEXTURE_2D, first_iteration ? framebuffer.brightness : pingpongbuffer.color[!horizontal]);
+					glDrawArrays(GL_TRIANGLES, 0, 6);
+				}
+				glBindVertexArray(0);
+
+				horizontal = !horizontal;
+				if (first_iteration)
+					first_iteration = false;
+			}
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 			bloomShader.use();
-			bloomShader.setInt("texture0", framebuffer.brightness);
-			break;
+			bloomShader.setInt("texture0", 0);
+			bloomShader.setInt("texture1", 1);
+
+			glBindVertexArray(fullscreen_quad.vao);
+			{
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
+
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, pingpongbuffer.color[0]);
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+			}
+			glBindVertexArray(0);
+		} break;
 		default:
 			fullscreenShader.use();
 			fullscreenShader.setInt("texture0", 0);
 			break;
 		}
 
-		glBindVertexArray(fullscreen_quad.vao);
+		if (effect_index != 6)
 		{
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
-			glDrawArrays(GL_TRIANGLES, 0, 6);
+			glBindVertexArray(fullscreen_quad.vao);
+			{
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+			}
+			glBindVertexArray(0);
 		}
-		glBindVertexArray(0);
 
 		drawUI();
 
@@ -278,6 +340,8 @@ void drawUI() {
 	ImGui::Begin("Fullscreen");
 	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color0, ImVec2(800, 600));
 	ImGui::Image((ImTextureID)(intptr_t)framebuffer.brightness, ImVec2(800, 600));
+	ImGui::Image((ImTextureID)(intptr_t)pingpongbuffer.color[0], ImVec2(800, 600));
+	ImGui::Image((ImTextureID)(intptr_t)pingpongbuffer.color[1], ImVec2(800, 600));
 	ImGui::End();
 
 	if (ImGui::BeginCombo("Effect", post_processing_effects[effect_index].c_str()))
