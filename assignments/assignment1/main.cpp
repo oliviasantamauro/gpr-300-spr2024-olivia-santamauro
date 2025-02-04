@@ -41,9 +41,10 @@ struct Material {
 struct FrameBuffer {
 	GLuint fbo;
 	GLuint color0;
-	GLuint color1;
+	GLuint brightness;
 	GLuint depth;
-} framebuffer;
+} framebuffer, pingpong[2];
+
 
 
 struct FullscreenQuad {
@@ -66,18 +67,25 @@ static int effect_index = 0;
 static std::vector<std::string> post_processing_effects = {
 	"None",
 	"Grayscale",
-	"Kernel Blur",
+	"Blur",
 	"Inverse",
 	"Chromatic Aberration",
+	"HDR",
+	"Bloom",
 };
 
-void render(ew::Shader shader, ew::Model model, ew::Transform transform) {
+void render(ew::Shader shader, ew::Model model, GLuint texture, ew::Transform transform) {
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
 	{
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
 		glEnable(GL_DEPTH_TEST);
-		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+		/*glClearColor(0.6f, 0.8f, 0.92f, 1.0f);*/
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, texture);
 
 		shader.use();
 
@@ -91,6 +99,9 @@ void render(ew::Shader shader, ew::Model model, ew::Transform transform) {
 		shader.setMat4("model", transform.modelMatrix());
 		shader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
 		model.draw();
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -106,12 +117,10 @@ int main() {
 	ew::Shader grayscaleShader = ew::Shader("assets/fullscreen.vert", "assets/greyscale.frag");
 	ew::Shader blurShader = ew::Shader("assets/fullscreen.vert", "assets/blur.frag");
 	ew::Shader chromaticShader = ew::Shader("assets/fullscreen.vert", "assets/chromatic.frag");
+	ew::Shader hdrShader = ew::Shader("assets/HDR.vert", "assets/HDR.frag");
+	ew::Shader bloomShader = ew::Shader("assets/HDR.vert", "assets/bloom.frag");
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
 	ew::Transform monkeyTransform;
-
-	//Culling
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
 
 	//Camera
 	camera.position = glm::vec3(0.0f, 0.0f, 5.0f);
@@ -145,11 +154,21 @@ int main() {
 		// color attachment
 		glGenTextures(1, &framebuffer.color0);
 		glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 800, 600, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.color0, 0);
+		
+		// color attachment
+		glGenTextures(1, &framebuffer.brightness);
+		glBindTexture(GL_TEXTURE_2D, framebuffer.brightness);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 800, 600, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, framebuffer.brightness, 0);
+
+		GLuint attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+		glDrawBuffers(2, attachments);
 
 		// check completeness
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
@@ -161,8 +180,7 @@ int main() {
 
 	//Textures
 	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, brickTexture);
+
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -175,7 +193,7 @@ int main() {
 		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0, 1.0, 0.0));
 
 		//RENDER to framebuffer
-		render(litShader, suzanne, monkeyTransform);
+		render(litShader, suzanne, brickTexture, monkeyTransform);
 
 		// render to default buffer
 		glDisable(GL_DEPTH_TEST);
@@ -187,29 +205,37 @@ int main() {
 		{
 		case 1:
 			grayscaleShader.use();
-			grayscaleShader.setInt("texture0", 1);
+			grayscaleShader.setInt("texture0", 0);
 			break;
 		case 2:
 			blurShader.use();
-			blurShader.setInt("texture0", 1);
+			blurShader.setInt("texture0", 0);
 			break;
 		case 3:
 			inverseShader.use();
-			inverseShader.setInt("texture0", 1);
+			inverseShader.setInt("texture0", 0);
 			break;
 		case 4:
 			chromaticShader.use();
-			chromaticShader.setInt("texture0", 1);
+			chromaticShader.setInt("texture0", 0);
+			break;
+		case 5:
+			hdrShader.use();
+			hdrShader.setInt("texture0", 0);
+			break;
+		case 6:
+			bloomShader.use();
+			bloomShader.setInt("texture0", framebuffer.brightness);
 			break;
 		default:
 			fullscreenShader.use();
-			fullscreenShader.setInt("texture0", 1);
+			fullscreenShader.setInt("texture0", 0);
 			break;
 		}
 
 		glBindVertexArray(fullscreen_quad.vao);
 		{
-			glActiveTexture(GL_TEXTURE1);
+			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
 			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
@@ -251,6 +277,7 @@ void drawUI() {
 
 	ImGui::Begin("Fullscreen");
 	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color0, ImVec2(800, 600));
+	ImGui::Image((ImTextureID)(intptr_t)framebuffer.brightness, ImVec2(800, 600));
 	ImGui::End();
 
 	if (ImGui::BeginCombo("Effect", post_processing_effects[effect_index].c_str()))

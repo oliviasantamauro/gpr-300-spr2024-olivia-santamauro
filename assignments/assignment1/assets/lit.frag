@@ -1,6 +1,7 @@
 #version 450
 
-out vec4 FragColor;
+layout(location = 0) out vec4 frag_color;
+layout(location = 1) out vec4 frag_bright;
 
 in Surface {
 	vec3 WorldPos;
@@ -12,8 +13,9 @@ in Surface {
 uniform sampler2D _MainTex;
 uniform vec3 _EyePos;
 uniform vec3 _LightDirection = vec3(0.0,-1.0,0.0);
-uniform vec3 _LightColor = vec3(1.0);
+uniform vec3 _LightColor = vec3(100.0, 0.0, 0.0);
 uniform vec3 _AmbientColor = vec3(0.3,0.4,0.46);
+
 
 struct Material{
 	float Ka; //ambient
@@ -38,6 +40,16 @@ void main(){
 	vec3 lightColor = (_Material.Kd * diffuseFactor + _Material.Ks * specularFactor) * _LightColor;
 	lightColor+=_AmbientColor * _Material.Ka;
 	vec3 objectColor = texture(_MainTex,fs_surface.TexCoord).rgb;
-	FragColor = vec4(objectColor * lightColor,1.0);
+	frag_color = vec4(objectColor * lightColor, 1.0);
+
+	// check brightness
+	float brightness = dot(frag_color.rgb, vec3(0.2126, 0.7152, 0.0722));
+	if(brightness > 1.0)
+	{
+		frag_bright = frag_color;
+	}
+	else{
+		frag_bright = vec4(0.0);
+	}
 
 }
