@@ -23,6 +23,7 @@ int screenWidth = 1080;
 int screenHeight = 720;
 float prevFrameTime;
 float deltaTime;
+glm::vec3 bgColor = glm::vec3(0.6f, 0.8f, 0.92f);
 
 //Camera
 ew::Camera camera;
@@ -50,6 +51,17 @@ struct PingPongBuffer {
 	GLuint color[2];
 } pingpongbuffer;
 
+
+// Post-Processing variables
+float exposure = 0.1f;
+float chromatic = 1.0f;
+int amount = 10;
+float sharpness = 1.0f;
+float detection = 0.2f;
+glm::vec3 edgeColor = glm::vec3(1.0f, 1.0f, 1.0f);
+float vigStrength = 0.2f;
+float vigAmount = 1.0f;
+
 struct FullscreenQuad {
 	GLuint vao;
 	GLuint vbo;
@@ -74,7 +86,10 @@ static std::vector<std::string> post_processing_effects = {
 	"Inverse",
 	"Chromatic Aberration",
 	"HDR",
-	"Bloom",
+	"Bloom", //i hate you
+	"Sharpness",
+	"Edge Detection",
+	"Vignette",
 };
 
 void render(ew::Shader shader, ew::Model model, GLuint texture, ew::Transform transform) {
@@ -83,8 +98,7 @@ void render(ew::Shader shader, ew::Model model, GLuint texture, ew::Transform tr
 		glEnable(GL_CULL_FACE);
 		glCullFace(GL_BACK);
 		glEnable(GL_DEPTH_TEST);
-		/*glClearColor(0.6f, 0.8f, 0.92f, 1.0f);*/
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glActiveTexture(GL_TEXTURE0);
@@ -122,6 +136,9 @@ int main() {
 	ew::Shader chromaticShader = ew::Shader("assets/fullscreen.vert", "assets/chromatic.frag");
 	ew::Shader hdrShader = ew::Shader("assets/HDR.vert", "assets/HDR.frag");
 	ew::Shader bloomShader = ew::Shader("assets/HDR.vert", "assets/bloom.frag");
+	ew::Shader sharpnessShader = ew::Shader("assets/fullscreen.vert", "assets/sharpness.frag");
+	ew::Shader edgeShader = ew::Shader("assets/fullscreen.vert", "assets/edge.frag");
+	ew::Shader vignetteShader = ew::Shader("assets/fullscreen.vert", "assets/vignette.frag");
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
 	ew::Transform monkeyTransform;
 
@@ -157,7 +174,7 @@ int main() {
 		// color attachment
 		glGenTextures(1, &framebuffer.color0);
 		glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 800, 600, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, screenWidth, screenHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.color0, 0);
@@ -165,7 +182,7 @@ int main() {
 		// color attachment
 		glGenTextures(1, &framebuffer.brightness);
 		glBindTexture(GL_TEXTURE_2D, framebuffer.brightness);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 800, 600, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, screenWidth, screenHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, framebuffer.brightness, 0);
@@ -188,18 +205,17 @@ int main() {
 	{
 		glBindFramebuffer(GL_FRAMEBUFFER, pingpongbuffer.fbo[i]);
 		glBindTexture(GL_TEXTURE_2D, pingpongbuffer.color[i]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 800, 600, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, screenWidth, screenHeight, 0, GL_RGBA, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongbuffer.color[i], 0);
 
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 			printf("framebuffer incomplete\n");
 			return 0;
 		}
-
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongbuffer.color[i], 0);
 	}
 
 	//Textures
@@ -221,7 +237,7 @@ int main() {
 
 		// render to default buffer
 		glDisable(GL_DEPTH_TEST);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// render fullscreen quad
@@ -242,19 +258,21 @@ int main() {
 		case 4:
 			chromaticShader.use();
 			chromaticShader.setInt("texture0", 0);
+			chromaticShader.setFloat("strength", chromatic);
 			break;
 		case 5:
 			hdrShader.use();
 			hdrShader.setInt("texture0", 0);
+			hdrShader.setFloat("exposure", exposure);
 			break;
 		case 6: {
 			bool horizontal = true, first_iteration = true;
-			int amount = 10;
 			blurShader.use();
 			blurShader.setInt("texture0", 0);
 			for (unsigned int i = 0; i < amount; i++)
 			{
 				glBindFramebuffer(GL_FRAMEBUFFER, pingpongbuffer.fbo[horizontal]);
+				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 				// render to fullscreen quad
 				glBindVertexArray(fullscreen_quad.vao);
@@ -271,21 +289,36 @@ int main() {
 			}
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-			bloomShader.use();
-			bloomShader.setInt("texture0", 0);
-			bloomShader.setInt("texture1", 1);
-
+			// render bloom
 			glBindVertexArray(fullscreen_quad.vao);
-			{
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
-
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, pingpongbuffer.color[0]);
-				glDrawArrays(GL_TRIANGLES, 0, 6);
-			}
+			bloomShader.use();
+			bloomShader.setFloat("exposure", exposure);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
+			bloomShader.setInt("scene", 0);
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, pingpongbuffer.color[1]);
+			bloomShader.setInt("bloomBlur", 1);
+			glDrawArrays(GL_TRIANGLES, 0, 6);
 			glBindVertexArray(0);
 		} break;
+		case 7:
+			sharpnessShader.use();
+			sharpnessShader.setInt("texture0", 0);
+			sharpnessShader.setFloat("strength", sharpness);
+			break;
+		case 8:
+			edgeShader.use();
+			edgeShader.setInt("texture0", 0);
+			edgeShader.setFloat("strength", detection);
+			edgeShader.setVec3("edgeColor", edgeColor);
+			break;
+		case 9:
+			vignetteShader.use();
+			vignetteShader.setInt("texture0", 0);
+			vignetteShader.setFloat("falloff", vigStrength);
+			vignetteShader.setFloat("amount", vigAmount);
+			break;
 		default:
 			fullscreenShader.use();
 			fullscreenShader.setInt("texture0", 0);
@@ -323,6 +356,7 @@ void drawUI() {
 	ImGui::NewFrame();
 	
 	ImGui::Begin("Settings");
+	ImGui::ColorEdit3("Background", (float*)&bgColor);
 	if (ImGui::CollapsingHeader("Camera")) {
 		if (ImGui::Button("Reset Camera")) {
 			resetCamera(&camera, &cameraController);
@@ -342,6 +376,17 @@ void drawUI() {
 	ImGui::Image((ImTextureID)(intptr_t)framebuffer.brightness, ImVec2(800, 600));
 	ImGui::Image((ImTextureID)(intptr_t)pingpongbuffer.color[0], ImVec2(800, 600));
 	ImGui::Image((ImTextureID)(intptr_t)pingpongbuffer.color[1], ImVec2(800, 600));
+	ImGui::End();
+
+	ImGui::Begin("Post-Processing Toggles");
+		ImGui::SliderFloat("Exposure", &exposure, 0.0f, 1.0f);
+		ImGui::SliderFloat("Chromatic Strength", &chromatic, 0.0f, 10.0f);
+		ImGui::SliderInt("Bloom Intensity", &amount, 1, 20);
+		ImGui::SliderFloat("Sharpness", &sharpness, 0.0f, 5.0f);
+		ImGui::SliderFloat("Edge Detection Strength", &detection, 0.0f, 1.0f);
+		ImGui::ColorEdit3("Edge Detection Color", (float*)&edgeColor);
+		ImGui::SliderFloat("Vignette Strength", &vigStrength, 0.0f, 1.0f);
+		ImGui::SliderFloat("Vignette Distance", &vigAmount, 0.0f, 10.0f);
 	ImGui::End();
 
 	if (ImGui::BeginCombo("Effect", post_processing_effects[effect_index].c_str()))

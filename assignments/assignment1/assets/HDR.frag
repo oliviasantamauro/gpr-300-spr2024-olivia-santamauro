@@ -4,6 +4,7 @@ out vec4 FragColor;
 in vec2 vs_texcoord;
 
 uniform sampler2D texture0;
+uniform float exposure;
 
 void main(){
 
@@ -11,7 +12,7 @@ void main(){
 	vec3 hdr = texture(texture0, vs_texcoord).rgb;
   
     // reinhard tone mapping
-    vec3 mapped = hdr / (hdr + vec3(1.0));
+    vec3 mapped = vec3(1.0) - exp(-hdr * exposure);
     
     // gamma correction 
     mapped = pow(mapped, vec3(1.0 / gamma));
