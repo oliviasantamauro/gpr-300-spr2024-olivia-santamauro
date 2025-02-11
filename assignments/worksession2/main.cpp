@@ -8,6 +8,8 @@
 #include <ew/cameraController.h>
 #include <ew/transform.h>
 #include <ew/texture.h>
+#include <vector>
+#include <ew/procGen.h>
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -28,21 +30,23 @@ float deltaTime;
 ew::Camera camera;
 ew::CameraController cameraController;
 
-struct Material {
-	float Ka = 1.0;
-	float Kd = 0.5;
-	float Ks = 0.5;
-	float Shininess = 128;
-}material;
+
+//WindWaker
+struct
+{
+	glm::vec3 color = glm::vec3(0.1f, 0.45f, 1.0f);
+	float tiling = 5.0f;
+	float speed = 0.5f;
+	float b1 = 0.5f;
+	float b2 = 0.15f;
+	float strength = 1.0f;
+	float spec_scale = 1.0f;
+}debug;
 
 
 int main() {
-	GLFWwindow* window = initWindow("Assignment 0", screenWidth, screenHeight);
+	GLFWwindow* window = initWindow("Work Session 1", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
-
-	ew::Shader litShader = ew::Shader("assets/lit.vert", "assets/lit.frag");
-	ew::Model suzanne = ew::Model("assets/suzanne.obj");
-	ew::Transform monkeyTransform;
 
 	//Culling
 	glEnable(GL_CULL_FACE);
@@ -55,38 +59,53 @@ int main() {
 	camera.aspectRatio = (float)screenWidth / screenHeight;
 	camera.fov = 60.0f;
 
-	//Textures
-	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, brickTexture);
+	ew::Shader waterShader = ew::Shader("assets/water.vert", "assets/water.frag");
+	GLuint texture = ew::loadTexture("assets/Archive/doubledash/wave_tex.png");
+	GLuint specular = ew::loadTexture("assets/Archive/doubledash/wave_spec.png");
+	GLuint warp = ew::loadTexture("assets/Archive/doubledash/wave_warp.png");
+
+
+
+	ew::Mesh plane = ew::createPlane(50.0f, 50.0f, 100);
 
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
+		const auto viewProj = camera.projectionMatrix() * camera.viewMatrix();
 		float time = (float)glfwGetTime();
 		deltaTime = time - prevFrameTime;
 		prevFrameTime = time;
 		cameraController.move(window, &camera, deltaTime);
 
-		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0, 1.0, 0.0));
-
 		//RENDER
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
 
-		litShader.use();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, specular);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, warp);
 
-		litShader.setFloat("_Material.Ka", material.Ka);
-		litShader.setFloat("_Material.Kd", material.Kd);
-		litShader.setFloat("_Material.Ks", material.Ks);
-		litShader.setFloat("_Material.Shininess", material.Shininess);
+		waterShader.use();
 
-		litShader.setVec3("_EyePos", camera.position);
-		litShader.setInt("_MainTex", 0);
-		litShader.setMat4("model", monkeyTransform.modelMatrix());
-		litShader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
-		suzanne.draw();
+		waterShader.setMat4("model", glm::mat4(1.0f));
+		waterShader.setMat4("viewProjection", viewProj);
+		waterShader.setVec3("camera_pos", camera.position);
+		waterShader.setFloat("uniform_strength", debug.strength);
+
+		waterShader.setVec3("water_color", debug.color);
+		waterShader.setInt("water_tex", 0);
+		waterShader.setInt("water_spec", 1);
+		waterShader.setInt("water_warp", 2);
+		waterShader.setFloat("tiling", debug.tiling);
+		waterShader.setFloat("time", time * debug.speed);
+		waterShader.setFloat("warp_strength", debug.b1 / 10);
+		waterShader.setFloat("b2", debug.b2);
+		
+		plane.draw();
 
 		drawUI();
 
@@ -115,13 +134,16 @@ void drawUI() {
 		}
 		ImGui::SliderFloat("FOV", &camera.fov, 0.0f, 120.0f);
 	}
+	ImGui::End();
 
-	if (ImGui::CollapsingHeader("Material")) {
-		ImGui::SliderFloat("AmbientK", &material.Ka, 0.0f, 1.0f);
-		ImGui::SliderFloat("DiffuseK", &material.Kd, 0.0f, 1.0f);
-		ImGui::SliderFloat("SpecularK", &material.Ks, 0.0f, 1.0f);
-		ImGui::SliderFloat("Shininess", &material.Shininess, 2.0f, 1024.0f);
-	}
+	ImGui::Begin("Wind Waker");
+	ImGui::ColorEdit3("Water Color", (float*)&debug.color);
+	ImGui::SliderFloat("Tiling", &debug.tiling, 1.0f, 10.0f);
+	ImGui::SliderFloat("Water Speed", &debug.speed, 0.0f, 1.0f);
+	ImGui::SliderFloat("Warp Strength", &debug.b1, 0.0f, 1.0f);
+	ImGui::SliderFloat("Shadow Blend", &debug.b2, 0.0f, 1.0f);
+	ImGui::SliderFloat("Wave", &debug.strength, 0.0f, 5.0f);
+	ImGui::SliderFloat("Highlight Size", &debug.spec_scale, 0.0f, 5.0f);
 	ImGui::End();
 
 	ImGui::Render();
@@ -170,3 +192,22 @@ GLFWwindow* initWindow(const char* title, int width, int height) {
 	return window;
 }
 
+GLenum glCheckError_(const char* file, int line)
+{
+	GLenum errorCode;
+	while ((errorCode = glGetError()) != GL_NO_ERROR)
+	{
+		std::string error;
+		switch (errorCode)
+		{
+		case GL_INVALID_ENUM:                  error = "INVALID_ENUM"; break;
+		case GL_INVALID_VALUE:                 error = "INVALID_VALUE"; break;
+		case GL_INVALID_OPERATION:             error = "INVALID_OPERATION"; break;
+		case GL_OUT_OF_MEMORY:                 error = "OUT_OF_MEMORY"; break;
+		case GL_INVALID_FRAMEBUFFER_OPERATION: error = "INVALID_FRAMEBUFFER_OPERATION"; break;
+		}
+		//printf(error + " | " + file + " (" + line + ")");
+	}
+	return errorCode;
+}
+#define glCheckError() glCheckError_(__FILE__, __LINE__) 
