@@ -38,17 +38,6 @@ namespace fb
 		}
 		else if (type == TEXTURE)
 		{
-			/*glGenTextures(1, &buffer.depthBuffer);
-
-			glBindTexture(GL_TEXTURE_2D, buffer.depthBuffer);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, hight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, buffer.depthBuffer, 0);*/
-
 			glGenTextures(1, &buffer.depthBuffer);
 
 			glBindTexture(GL_TEXTURE_2D, buffer.depthBuffer);
@@ -58,13 +47,7 @@ namespace fb
 
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, buffer.depthBuffer, 0);
-
-			//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer.colorBuffer[0], 0);
-
-
 		}
-
-		//attach buffers	
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer.colorBuffer[0], 0);
 
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
@@ -86,11 +69,9 @@ namespace fb
 		buffer.width = width;
 		buffer.hight = hight;
 
-		//buffer code
 		glGenFramebuffers(1, &buffer.fbo);
 		glBindFramebuffer(GL_FRAMEBUFFER, buffer.fbo);
 
-		//create color
 		glGenTextures(1, &buffer.colorBuffer[0]);
 
 		glBindTexture(GL_TEXTURE_2D, buffer.colorBuffer[0]);
@@ -100,7 +81,6 @@ namespace fb
 
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer.colorBuffer[0], 0);
 
-		//create brightness
 		glGenTextures(1, &buffer.colorBuffer[1]);
 
 		glBindTexture(GL_TEXTURE_2D, buffer.colorBuffer[1]);
@@ -109,8 +89,7 @@ namespace fb
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-		//attach buffers	
+	
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, buffer.colorBuffer[1], 0);
 
 		GLuint att[2] = { GL_COLOR_ATTACHMENT0 , GL_COLOR_ATTACHMENT1 };
@@ -151,8 +130,10 @@ namespace fb
 			shdw_width, shdw_hight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+		float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, buffer.depthBuffer, 0);
 		glDrawBuffer(GL_NONE);

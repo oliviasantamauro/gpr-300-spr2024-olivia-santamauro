@@ -1,6 +1,6 @@
 #version 450
 
-out vec4 FragColor; //the color of the fragment Shader
+out vec4 FragColor;
 
 in Surface{
 	vec3 WorldPos;
@@ -22,20 +22,18 @@ struct Material{
 //uniforms
 uniform Material _Material;
 
-//texture uniforms
 uniform sampler2D _MainTex;
 uniform sampler2D _ShadowMap;
 
-//light uniforms
 uniform vec3 _LightDirection = vec3(0.0, -1.0, 0.0);
 uniform vec3 _LightColor = vec3(1.0);
 uniform vec3 _AmbientColor = vec3(0.3,0.4,0.46);
+uniform float _Bias;
 
-//camera uniforms
 uniform vec3 _EyePos;
 
 
-float shadowCalcualtion(vec4 fragPosLightSpace)
+float shadowCalculation(vec4 fragPosLightSpace, float bias)
 {
 	vec3 projCoords = fragPosLightSpace.xyz/fragPosLightSpace.w;
 
@@ -44,19 +42,18 @@ float shadowCalcualtion(vec4 fragPosLightSpace)
 	float closestDepth = texture(_ShadowMap, projCoords.xy).r;
 	float currentDepth = projCoords.z;
 
+	float shadow = currentDepth - bias > closestDepth  ? 1.0 : 0.0; 
+
 	if(projCoords.z  <= 0.0 || projCoords.z > 1.0)
 	 {
 		return 0.0;
 	 }
 
-	float shadow = currentDepth > closestDepth ? 1.0 : 0.0;
-
 	return shadow;
 }
 
-vec3 blinFong()
+vec3 blinnPhong()
 {
-	
 	vec3 normal = normalize(fs_in.WorldNormal);
 	normal = normalize(normal * 2.0 - 1.0);
 
@@ -80,10 +77,11 @@ vec3 blinFong()
 void main()
 {
 	
-	vec3 lightColor = blinFong();
+	vec3 lightColor = blinnPhong();
 	vec3 objectColor = texture(_MainTex,fs_in.TexCoord).rgb;
-	float shadow = shadowCalcualtion(fs_in.fragPosLightSpace);
-	vec3 finalColor = ((_AmbientColor * _Material.Ka) + (1.0 - shadow) * lightColor )* objectColor;
+	float bias = max(0.05 * (1.0 - dot(fs_in.WorldNormal, _LightDirection)), _Bias);
+	float shadow = shadowCalculation(fs_in.fragPosLightSpace, bias);
+	vec3 finalColor = ((_AmbientColor * _Material.Ka) + (1.0 - shadow) * lightColor ) * objectColor;
 
 	FragColor = vec4(finalColor, 1.0);
 }

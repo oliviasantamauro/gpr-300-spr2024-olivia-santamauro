@@ -53,26 +53,27 @@ struct Light
 fb::FrameBuffer shadowMap;
 
 //depth map
-const int SHADOW_SIZE = 256;
+const int SHADOW_SIZE = 1024;
 float near_plane = 1.0f, far_plane = 7.5f;
 glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
 glm::mat4 lightView = glm::lookAt(glm::vec3(-2.0f, 4.0f, -1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+float bias;
 
-//render objects to screen
-void render(ew::Shader& shader, ew::Shader& shadowShader, glm::mat4 lightMat, ew::Mesh plane, ew::Model model, GLuint texture, ew::Transform transform, GLFWwindow* window) {
 
-	transform.rotation = glm::rotate(transform.rotation, deltaTime, glm::vec3(0.0, 1.0, 0.0));
+void renderShadow(ew::Shader& shader, glm::mat4 lightMat, ew::Transform transform, ew::Model model) {
 
-	//draw to shadow buffer
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_FRONT);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowMap.fbo);
 	{
 		glViewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
 
 		glEnable(GL_DEPTH_TEST);
 		glClear(GL_DEPTH_BUFFER_BIT);
-		shadowShader.use();
-		shadowShader.setMat4("lightSpaceMatrix", lightMat);
-		shadowShader.setMat4("model", transform.modelMatrix());
+		shader.use();
+		shader.setMat4("lightSpaceMatrix", lightMat);
+		shader.setMat4("model", transform.modelMatrix());
 
 		model.draw();
 	}
@@ -80,15 +81,16 @@ void render(ew::Shader& shader, ew::Shader& shadowShader, glm::mat4 lightMat, ew
 
 	glViewport(0, 0, screenWidth, screenHeight);
 
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
+}
 
+void renderModel(ew::Shader& shader, glm::mat4 lightMat, ew::Model model, GLuint texture, ew::Transform transform) {
+
+	glCullFace(GL_BACK);
 	glEnable(GL_DEPTH_TEST);
 
 	glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	//texture
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, texture);
 
@@ -97,30 +99,42 @@ void render(ew::Shader& shader, ew::Shader& shadowShader, glm::mat4 lightMat, ew
 
 	shader.use();
 
-	//camera uniforms
-	shader.setMat4("_VeiwProjection", camera.projectionMatrix() * camera.viewMatrix());
+	shader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
 	shader.setMat4("_LightSpaceMatrix", lightMat);
 	shader.setVec3("_EyePos", camera.position);
-
-	//model uniforms
-
 	shader.setMat4("_Model", transform.modelMatrix());
-
-	//material
 	shader.setFloat("_Material.Ka", material.Ka);
 	shader.setFloat("_Material.Kd", material.Kd);
 	shader.setFloat("_Material.Ks", material.Ks);
 	shader.setFloat("_Material.Shininess", material.Shininess);
-
-	//textures
+	shader.setFloat("_Bias", bias);
 	shader.setInt("_MainTex", 0);
 	shader.setInt("_ShadowMap", 1);
 
 	model.draw();
+}
 
+void renderPlane(ew::Shader& shader, ew::Transform transform, ew::Mesh plane, glm::mat4 lightMat, GLuint texture, GLFWwindow* window) {
 
-	shader.setMat4("_Model", glm::translate(glm::vec3(0.0f, -2.0f, 0.0f)));
-	//draw plane
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texture);
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, shadowMap.depthBuffer);
+
+	shader.use();
+	shader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
+	shader.setMat4("model", transform.modelMatrix());
+	shader.setMat4("_LightSpaceMatrix", lightMat);
+	shader.setFloat("_Material.Ka", material.Ka);
+	shader.setFloat("_Material.Kd", material.Kd);
+	shader.setFloat("_Material.Ks", material.Ks);
+	shader.setFloat("_Material.Shininess", material.Shininess);
+	shader.setFloat("_Bias", bias);
+	shader.setVec3("_EyePos", camera.position);
+	shader.setInt("_MainTex", 0);
+	shader.setInt("_ShadowMap", 1);
+
 	plane.draw();
 
 	cameraController.move(window, &camera, deltaTime);
@@ -133,6 +147,7 @@ int main() {
 	//shaders
 	ew::Shader depthShader = ew::Shader("assets/depth.vert", "assets/depth.frag");
 	ew::Shader shadowShader = ew::Shader("assets/shadow.vert", "assets/shadow.frag");
+	ew::Shader planeShader = ew::Shader("assets/plane.vert", "assets/depth.frag");
 
 	//suzanne
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
@@ -140,6 +155,8 @@ int main() {
 
 	//plane
 	ew::Mesh plane = ew::createPlane(10, 10, 10);
+	ew::Transform planeTransform;
+	planeTransform.position = glm::vec3(0.0, -2.0, 0.0);
 	
 	//shadow map
 	shadowMap = fb::createShadowBuffer(SHADOW_SIZE, SHADOW_SIZE);
@@ -171,10 +188,14 @@ int main() {
 		deltaTime = time - prevFrameTime;
 		prevFrameTime = time;
 
+		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0, 1.0, 0.0));
+
 		//RENDER
 		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		render(depthShader, shadowShader, lightMat, plane, suzanne, brickTexture, monkeyTransform, window);
+		renderShadow(shadowShader, lightMat, monkeyTransform, suzanne);
+		renderModel(depthShader, lightMat, suzanne, brickTexture, monkeyTransform);
+		renderPlane(planeShader, planeTransform, plane, lightMat, brickTexture, window);
 
 		drawUI();
 
@@ -210,6 +231,7 @@ void drawUI() {
 		ImGui::SliderFloat("SpecularK", &material.Ks, 0.0f, 1.0f);
 		ImGui::SliderFloat("Shininess", &material.Shininess, 2.0f, 1024.0f);
 	}
+	//ImGui::SliderFloat("Bias", &bias, 0.001f, 0.1f);
 	ImGui::Image((ImTextureID)(intptr_t)shadowMap.depthBuffer, ImVec2(400, 300));
 
 	ImGui::End();
