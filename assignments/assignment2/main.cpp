@@ -44,7 +44,7 @@ struct Material {
 
 struct Light
 {
-	glm::vec3 lightDirection = glm::vec3(0.0, -1.0, 0.0);
+	glm::vec3 lightDirection = glm::vec3(-2.0f, 4.0f, -1.0f);
 	glm::vec3 lightColor = glm::vec3(1.0);
 
 }light;
@@ -54,7 +54,7 @@ fb::FrameBuffer shadowMap;
 
 //depth map
 const int SHADOW_SIZE = 1024;
-float near_plane = 1.0f, far_plane = 7.5f;
+float near_plane = 1.0f, far_plane = 8.0f;
 glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
 glm::mat4 lightView = glm::lookAt(glm::vec3(-2.0f, 4.0f, -1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 float bias;
@@ -182,6 +182,8 @@ int main() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
+		glm::mat4 lightView = glm::lookAt(light.lightDirection, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
 		const glm::mat4 lightMat = lightProjection * lightView;
 
 		float time = (float)glfwGetTime();
@@ -231,7 +233,10 @@ void drawUI() {
 		ImGui::SliderFloat("SpecularK", &material.Ks, 0.0f, 1.0f);
 		ImGui::SliderFloat("Shininess", &material.Shininess, 2.0f, 1024.0f);
 	}
-	//ImGui::SliderFloat("Bias", &bias, 0.001f, 0.1f);
+	if (ImGui::CollapsingHeader("Shadow Map")) {
+		ImGui::DragFloat3("Light Position", &light.lightDirection.x);
+		ImGui::SliderFloat("Bias", &bias, 0.001f, 0.1f);
+	}
 	ImGui::Image((ImTextureID)(intptr_t)shadowMap.depthBuffer, ImVec2(400, 300));
 
 	ImGui::End();

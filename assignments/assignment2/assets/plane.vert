@@ -15,12 +15,14 @@ out Surface{
 
 uniform mat4 model;
 uniform mat4 viewProjection;
+uniform mat4 _LightSpaceMatrix;
 
 void main(){
 
 	vs_out.WorldPos = vec3(model * vec4(in_Pos,1.0));
 	vs_out.WorldNormal = transpose(inverse(mat3(model))) * in_Normal;
 	vs_out.TexCoord = in_TexCoords;
+	vs_out.fragPosLightSpace = _LightSpaceMatrix * vec4(vs_out.WorldPos, 1.0);
 
 	gl_Position = viewProjection * model * vec4(in_Pos,1.0);
 }
