@@ -4,11 +4,11 @@
 namespace fb
 {
 
-	FrameBuffer createFrameBuffer(unsigned int width, unsigned int hight, unsigned int colorFormat, DepthType type)
+	FrameBuffer createFrameBuffer(unsigned int width, unsigned int height, unsigned int colorFormat, DepthType type)
 	{
 		fb::FrameBuffer buffer;
 		buffer.width = width;
-		buffer.hight = hight;
+		buffer.hight = height;
 
 		//buffer code
 		glGenFramebuffers(1, &buffer.fbo);
@@ -18,7 +18,7 @@ namespace fb
 		glGenTextures(1, &buffer.colorBuffer[0]);
 
 		glBindTexture(GL_TEXTURE_2D, buffer.colorBuffer[0]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, hight, 0, colorFormat, GL_UNSIGNED_BYTE, nullptr);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, colorFormat, GL_UNSIGNED_BYTE, nullptr);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -30,7 +30,7 @@ namespace fb
 			glGenRenderbuffers(1, &buffer.depthBuffer);
 
 			glBindRenderbuffer(GL_RENDERBUFFER, buffer.depthBuffer);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, hight);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
 			glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
 
@@ -41,7 +41,7 @@ namespace fb
 			glGenTextures(1, &buffer.depthBuffer);
 
 			glBindTexture(GL_TEXTURE_2D, buffer.depthBuffer);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, hight, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -62,12 +62,12 @@ namespace fb
 		return buffer;
 	}
 
-	FrameBuffer createHDR_FramBuffer(unsigned int width, unsigned int hight)
+	FrameBuffer createHDR_FramBuffer(unsigned int width, unsigned int height)
 	{
 
 		fb::FrameBuffer buffer;
 		buffer.width = width;
-		buffer.hight = hight;
+		buffer.hight = height;
 
 		glGenFramebuffers(1, &buffer.fbo);
 		glBindFramebuffer(GL_FRAMEBUFFER, buffer.fbo);
@@ -75,7 +75,7 @@ namespace fb
 		glGenTextures(1, &buffer.colorBuffer[0]);
 
 		glBindTexture(GL_TEXTURE_2D, buffer.colorBuffer[0]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, hight, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -84,7 +84,7 @@ namespace fb
 		glGenTextures(1, &buffer.colorBuffer[1]);
 
 		glBindTexture(GL_TEXTURE_2D, buffer.colorBuffer[1]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, hight, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -98,7 +98,7 @@ namespace fb
 		glGenTextures(1, &buffer.depthBuffer);
 
 		glBindTexture(GL_TEXTURE_2D, buffer.depthBuffer);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, hight, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
