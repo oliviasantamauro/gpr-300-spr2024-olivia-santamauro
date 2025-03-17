@@ -16,6 +16,11 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <ew/procGen.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/transform.hpp>
+
+
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 GLFWwindow* initWindow(const char* title, int width, int height);
 void drawUI();
@@ -103,6 +108,11 @@ struct FrameBuffer {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, framebuffer.color2, 0);
 
+			glGenRenderbuffers(1, &framebuffer.depth);
+			glBindRenderbuffer(GL_RENDERBUFFER, framebuffer.depth);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, screenWidth, screenHeight);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, framebuffer.depth);
+
 			GLuint attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
 			glDrawBuffers(3, attachments);
 
@@ -112,59 +122,134 @@ struct FrameBuffer {
 			}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
-} framebuffer;
+} framebuffer, lightbuffer;
 
-void postProcessing(ew::Shader shader) {
-	shader.use();
-	shader.setInt("g_albedo", framebuffer.color0);
-	shader.setInt("g_position", framebuffer.color1);
-	shader.setInt("g_normal", framebuffer.color2);
-
+void postProcessing(ew::Shader& shader, FrameBuffer& buffer, FrameBuffer& bufferLight) {
 	glDisable(GL_DEPTH_TEST);
-
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
 
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, framebuffer.color0);
+	glBindTexture(GL_TEXTURE_2D, buffer.color0);
 
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, framebuffer.color1);
+	glBindTexture(GL_TEXTURE_2D, buffer.color1);
 
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, framebuffer.color2);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, buffer.color2);
 
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, bufferLight.color0);
 
-
-}
-
-void render(ew::Shader shader, ew::Transform transform, ew::Model model) {
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
-
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
-
-	// setup pipeline
+	glActiveTexture(GL_TEXTURE4);
+	glBindTexture(GL_TEXTURE_2D, bufferLight.color1);
 
 	shader.use();
-	shader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
-	for (int i = 1; i < 4; i++) {
-		for (int c = 1; c < 4; c++) {
-			shader.setMat4("model", glm::translate(glm::vec3(i * 3.0, 0.0, c * 3.0)));
+
+	shader.setInt("_Coords", 1);
+	shader.setInt("_Normals", 2);
+	shader.setInt("_Albedo", 0);
+	shader.setInt("_LightAlbedo", 3);
+	shader.setInt("_LightPos", 4);
+	shader.setVec3("_EyePos", camera.position);
+	shader.setFloat("_Material.Ka", material.Ka);
+	shader.setFloat("_Material.Kd", material.Kd);
+	shader.setFloat("_Material.Ks", material.Ks);
+	shader.setFloat("_Material.Shininess", material.Shininess);
+
+	glBindVertexArray(fullscreen_quad.vao);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glBindVertexArray(0);
+}
+
+void render(ew::Shader& shader, ew::Transform& transform, ew::Model& model, GLFWwindow* window, GLuint texture) {
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
+
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
+
+	glEnable(GL_DEPTH_TEST);
+
+	//gfx pass
+	glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	//texture
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texture);
+
+	shader.use();
+
+	shader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
+	shader.setVec3("_EyePos", camera.position);
+	shader.setFloat("_Material.Ka", material.Ka);
+	shader.setFloat("_Material.Kd", material.Kd);
+	shader.setFloat("_Material.Ks", material.Ks);
+	shader.setFloat("_Material.Shininess", material.Shininess);
+	shader.setInt("_MainTex", 0);
+
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
 			model.draw();
+			shader.setMat4("_Model", glm::translate(glm::vec3(2.0f * i, 0, 2.0f * j)));
 		}
 	}
+
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+
+void renderLight(ew::Shader& litShader, ew::Mesh& light) {
+	glBindFramebuffer(GL_FRAMEBUFFER, lightbuffer.fbo);
+
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
+
+	glEnable(GL_DEPTH_TEST);
+
+	glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	litShader.use();
+
+	litShader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
+	litShader.setVec3("_LightDirection", glm::vec3(0.0f, -1.0f, 0.0f));
+	litShader.setVec3("_LightColor", glm::vec3(1.0f));
+	litShader.setVec3("_AmbientColor", glm::vec3(0.3f, 0.4f, 0.46f));
+	litShader.setVec3("_EyePos", camera.position);
+	litShader.setFloat("_Material.Ka", material.Ka);
+	litShader.setFloat("_Material.Kd", material.Kd);
+	litShader.setFloat("_Material.Ks", material.Ks);
+	litShader.setFloat("_Material.Shininess", material.Shininess);
+
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
+			light.draw();
+			litShader.setMat4("_Model", glm::translate(glm::vec3(2.0f * i, 5, 2.0f * j)));
+		}
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 
 int main() {
 	GLFWwindow* window = initWindow("Assignment 0", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
+
+	//Shader and asset creation
 	ew::Shader litShader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader geoShader = ew::Shader("assets/geo.vert", "assets/geo.frag");
+	ew::Shader defaultShader = ew::Shader("assets/base.vert", "assets/base.frag");
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
 	ew::Transform monkeyTransform;
+	ew::Mesh light = ew::createSphere(0.5f, 4);
+	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
 
 	//Culling
 	glEnable(GL_CULL_FACE);
@@ -178,8 +263,8 @@ int main() {
 	camera.fov = 60.0f;
 
 	framebuffer.intitialize();
+	lightbuffer.intitialize();
 	fullscreen_quad.intitialize();
-
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -190,8 +275,10 @@ int main() {
 		cameraController.move(window, &camera, deltaTime);
 
 		//RENDER
-		render(geoShader, monkeyTransform, suzanne);
-		//lighting(litShader)
+		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+		render(defaultShader, monkeyTransform, suzanne, window, brickTexture);
+		renderLight(litShader, light);
+		postProcessing(geoShader, framebuffer, lightbuffer);
 
 		drawUI();
 
@@ -212,7 +299,6 @@ void drawUI() {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui::NewFrame();
 	
-
 	ImGui::Begin("Settings");
 	if (ImGui::CollapsingHeader("Camera")) {
 		if (ImGui::Button("Reset Camera")) {
@@ -230,6 +316,11 @@ void drawUI() {
 	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color0, ImVec2(400, 300));
 	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color1, ImVec2(400, 300));
 	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color2, ImVec2(400, 300));
+
+	ImGui::Image((ImTextureID)(intptr_t)lightbuffer.color0, ImVec2(400, 300));
+	ImGui::Image((ImTextureID)(intptr_t)lightbuffer.color1, ImVec2(400, 300));
+	ImGui::Image((ImTextureID)(intptr_t)lightbuffer.color2, ImVec2(400, 300));
+
 	ImGui::End();
 
 	ImGui::Render();

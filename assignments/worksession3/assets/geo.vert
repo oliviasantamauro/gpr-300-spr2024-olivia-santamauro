@@ -1,23 +1,17 @@
 #version 450
 
-layout(location = 0) in vec3 vPos;
-layout(location = 1) in vec3 vNormal;
-layout(location = 2) in vec2 vTexCoord;
+layout(location = 0) in vec3 in_Pos;
+layout(location = 1) in vec2 in_TexCoords;
 
-out Surface {
+out Surface{
 	vec3 WorldPos;
 	vec3 WorldNormal;
 	vec2 TexCoord;
-}vs_surface;
+	mat3 TBN;
+}vs_out;
 
-uniform mat4 model;
-uniform mat4 viewProjection;
-
-void main(){
-
-	vs_surface.WorldPos = vec3(model * vec4(vPos,1.0));
-	vs_surface.WorldNormal = transpose(inverse(mat3(model))) * vNormal;
-	vs_surface.TexCoord = vTexCoord;
-
-	gl_Position = viewProjection * model * vec4(vPos,1.0);
+void main()
+{
+	vs_out.TexCoord = in_TexCoords;
+	gl_Position = vec4(vec3(in_Pos.xy, 0), 1.0);
 }
