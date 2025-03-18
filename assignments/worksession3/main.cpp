@@ -34,6 +34,7 @@ float deltaTime;
 //Camera
 ew::Camera camera;
 ew::CameraController cameraController;
+glm::vec4 bgColor = glm::vec4(0.8f, 0.6f, 1.0f, 1.0f);
 
 struct Material {
 	float Ka = 1.0;
@@ -122,11 +123,13 @@ struct FrameBuffer {
 			}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
-} framebuffer, lightbuffer;
+} framebuffer;
 
-void postProcessing(ew::Shader& shader, FrameBuffer& buffer, FrameBuffer& bufferLight) {
+int count = 25;
+
+void postProcessing(ew::Shader& shader, FrameBuffer& buffer) {
 	glDisable(GL_DEPTH_TEST);
-	glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+	glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glActiveTexture(GL_TEXTURE0);
@@ -138,19 +141,11 @@ void postProcessing(ew::Shader& shader, FrameBuffer& buffer, FrameBuffer& buffer
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, buffer.color2);
 
-	glActiveTexture(GL_TEXTURE3);
-	glBindTexture(GL_TEXTURE_2D, bufferLight.color0);
-
-	glActiveTexture(GL_TEXTURE4);
-	glBindTexture(GL_TEXTURE_2D, bufferLight.color1);
-
 	shader.use();
 
+	shader.setInt("_Albedo", 0);
 	shader.setInt("_Coords", 1);
 	shader.setInt("_Normals", 2);
-	shader.setInt("_Albedo", 0);
-	shader.setInt("_LightAlbedo", 3);
-	shader.setInt("_LightPos", 4);
 	shader.setVec3("_EyePos", camera.position);
 	shader.setFloat("_Material.Ka", material.Ka);
 	shader.setFloat("_Material.Kd", material.Kd);
@@ -172,7 +167,7 @@ void render(ew::Shader& shader, ew::Transform& transform, ew::Model& model, GLFW
 	glEnable(GL_DEPTH_TEST);
 
 	//gfx pass
-	glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+	glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	//texture
@@ -183,15 +178,11 @@ void render(ew::Shader& shader, ew::Transform& transform, ew::Model& model, GLFW
 
 	shader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
 	shader.setVec3("_EyePos", camera.position);
-	shader.setFloat("_Material.Ka", material.Ka);
-	shader.setFloat("_Material.Kd", material.Kd);
-	shader.setFloat("_Material.Ks", material.Ks);
-	shader.setFloat("_Material.Shininess", material.Shininess);
 	shader.setInt("_MainTex", 0);
 
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < count; i++)
 	{
-		for (int j = 0; j < 10; j++)
+		for (int j = 0; j < count; j++)
 		{
 			model.draw();
 			shader.setMat4("_Model", glm::translate(glm::vec3(2.0f * i, 0, 2.0f * j)));
@@ -201,35 +192,25 @@ void render(ew::Shader& shader, ew::Transform& transform, ew::Model& model, GLFW
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void renderLight(ew::Shader& litShader, ew::Mesh& light) {
-	glBindFramebuffer(GL_FRAMEBUFFER, lightbuffer.fbo);
-
+void renderLight(ew::Shader& shader, ew::Mesh& light) {
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
-
 	glEnable(GL_DEPTH_TEST);
 
-	glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
+	glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	litShader.use();
+	shader.use();
 
-	litShader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
-	litShader.setVec3("_LightDirection", glm::vec3(0.0f, -1.0f, 0.0f));
-	litShader.setVec3("_LightColor", glm::vec3(1.0f));
-	litShader.setVec3("_AmbientColor", glm::vec3(0.3f, 0.4f, 0.46f));
-	litShader.setVec3("_EyePos", camera.position);
-	litShader.setFloat("_Material.Ka", material.Ka);
-	litShader.setFloat("_Material.Kd", material.Kd);
-	litShader.setFloat("_Material.Ks", material.Ks);
-	litShader.setFloat("_Material.Shininess", material.Shininess);
+	shader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
+	shader.setVec3("_LightColor", glm::vec3(1.0f));
 
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < count; i++)
 	{
-		for (int j = 0; j < 10; j++)
+		for (int j = 0; j < count; j++)
 		{
 			light.draw();
-			litShader.setMat4("_Model", glm::translate(glm::vec3(2.0f * i, 5, 2.0f * j)));
+			shader.setMat4("_Model", glm::translate(glm::vec3(2.0f * i, 3, 2.0f * j)));
 		}
 	}
 
@@ -243,9 +224,10 @@ int main() {
 
 
 	//Shader and asset creation
+	//ew::Shader defaultShader = ew::Shader("assets/default.vert", "assets/default.frag");
 	ew::Shader litShader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader geoShader = ew::Shader("assets/geo.vert", "assets/geo.frag");
-	ew::Shader defaultShader = ew::Shader("assets/base.vert", "assets/base.frag");
+	ew::Shader sphereShader = ew::Shader("assets/sphere.vert", "assets/sphere.frag");
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
 	ew::Transform monkeyTransform;
 	ew::Mesh light = ew::createSphere(0.5f, 4);
@@ -257,13 +239,12 @@ int main() {
 	glEnable(GL_DEPTH_TEST);
 
 	//Camera
-	camera.position = glm::vec3(0.0f, 0.0f, 5.0f);
+	camera.position = glm::vec3(0.0f, 5.0f, 5.0f);
 	camera.target = glm::vec3(0.0f, 0.0f, 0.0f);
 	camera.aspectRatio = (float)screenWidth / screenHeight;
 	camera.fov = 60.0f;
 
 	framebuffer.intitialize();
-	lightbuffer.intitialize();
 	fullscreen_quad.intitialize();
 
 	while (!glfwWindowShouldClose(window)) {
@@ -275,10 +256,9 @@ int main() {
 		cameraController.move(window, &camera, deltaTime);
 
 		//RENDER
-		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
-		render(defaultShader, monkeyTransform, suzanne, window, brickTexture);
-		renderLight(litShader, light);
-		postProcessing(geoShader, framebuffer, lightbuffer);
+		render(litShader, monkeyTransform, suzanne, window, brickTexture);
+		renderLight(sphereShader, light);
+		postProcessing(geoShader, framebuffer);
 
 		drawUI();
 
@@ -288,7 +268,7 @@ int main() {
 }
 
 void resetCamera(ew::Camera* camera, ew::CameraController* controller) {
-	camera->position = glm::vec3(0, 0, 5.0f);
+	camera->position = glm::vec3(0, 5.0f, 5.0f);
 	camera->target = glm::vec3(0);
 	controller->yaw = controller->pitch = 0;
 }
@@ -313,14 +293,12 @@ void drawUI() {
 		ImGui::SliderFloat("SpecularK", &material.Ks, 0.0f, 1.0f);
 		ImGui::SliderFloat("Shininess", &material.Shininess, 2.0f, 1024.0f);
 	}
-	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color0, ImVec2(400, 300));
-	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color1, ImVec2(400, 300));
-	ImGui::Image((ImTextureID)(intptr_t)framebuffer.color2, ImVec2(400, 300));
-
-	ImGui::Image((ImTextureID)(intptr_t)lightbuffer.color0, ImVec2(400, 300));
-	ImGui::Image((ImTextureID)(intptr_t)lightbuffer.color1, ImVec2(400, 300));
-	ImGui::Image((ImTextureID)(intptr_t)lightbuffer.color2, ImVec2(400, 300));
-
+	if (ImGui::CollapsingHeader("So Many Suzannes")) {
+		ImGui::SliderInt("Suzanne Count", &count, 1, 50);
+		ImGui::Image((ImTextureID)(intptr_t)framebuffer.color0, ImVec2(400, 300));
+		ImGui::Image((ImTextureID)(intptr_t)framebuffer.color1, ImVec2(400, 300));
+		ImGui::Image((ImTextureID)(intptr_t)framebuffer.color2, ImVec2(400, 300));
+	}
 	ImGui::End();
 
 	ImGui::Render();
