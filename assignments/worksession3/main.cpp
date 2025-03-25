@@ -36,12 +36,30 @@ ew::Camera camera;
 ew::CameraController cameraController;
 glm::vec4 bgColor = glm::vec4(0.8f, 0.6f, 1.0f, 1.0f);
 
+int count = 25;
+
 struct Material {
 	float Ka = 1.0;
 	float Kd = 0.5;
 	float Ks = 0.5;
 	float Shininess = 128;
 }material;
+
+const int maxLights = 64;
+struct PointLight {
+	glm::vec3 position;
+	float radius;
+	glm::vec4 color;
+
+	void initialize(int x, int z) {
+		radius = 0.4f;
+		color.r = (rand() % 256) / 255.0f;
+		color.g = (rand() % 256) / 255.0f;
+		color.b = (rand() % 256) / 255.0f;
+		color.a = 1.0f;
+		position = glm::vec3(2.0f * x, 5.0f, 2.0f * z);
+	}
+} pointLights[maxLights];
 
 static float quad_vertices[] = {
 	// pos (x, y) texcoord (u, v)
@@ -125,8 +143,6 @@ struct FrameBuffer {
 	}
 } framebuffer;
 
-int count = 25;
-
 void postProcessing(ew::Shader& shader, FrameBuffer& buffer) {
 	glDisable(GL_DEPTH_TEST);
 	glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
@@ -151,6 +167,14 @@ void postProcessing(ew::Shader& shader, FrameBuffer& buffer) {
 	shader.setFloat("_Material.Kd", material.Kd);
 	shader.setFloat("_Material.Ks", material.Ks);
 	shader.setFloat("_Material.Shininess", material.Shininess);
+
+	for (int i = 0; i < maxLights; i++) {
+		//Creates prefix "_PointLights[0]." etc
+		std::string prefix = "_PointLights[" + std::to_string(i) + "].";
+		shader.setVec3(prefix + "position", pointLights[i].position);
+		shader.setFloat(prefix + "radius", pointLights[i].radius);
+		shader.setVec4(prefix + "color", pointLights[i].color);
+	}
 
 	glBindVertexArray(fullscreen_quad.vao);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -197,23 +221,23 @@ void renderLight(ew::Shader& shader, ew::Mesh& light) {
 	glCullFace(GL_BACK);
 	glEnable(GL_DEPTH_TEST);
 
-	glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer.fbo);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glBlitFramebuffer(0, 0, screenWidth, screenHeight, 0, 0, screenWidth, screenHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
 	shader.use();
 
 	shader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
-	shader.setVec3("_LightColor", glm::vec3(1.0f));
-
-	for (int i = 0; i < count; i++)
+	for (int i = 0; i < count * count; i++)
 	{
-		for (int j = 0; j < count; j++)
-		{
-			light.draw();
-			shader.setMat4("_Model", glm::translate(glm::vec3(2.0f * i, 3, 2.0f * j)));
-		}
-	}
+		glm::mat4 m = glm::mat4(1.0f);
+		m = glm::translate(m, pointLights[i].position);
+		m = glm::scale(m, glm::vec3(pointLights[i].radius));
 
+		shader.setMat4("_Model", m);
+		shader.setVec3("_LightColor", pointLights[i].color);
+		light.draw();
+	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -225,12 +249,12 @@ int main() {
 
 	//Shader and asset creation
 	//ew::Shader defaultShader = ew::Shader("assets/default.vert", "assets/default.frag");
-	ew::Shader litShader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader geoShader = ew::Shader("assets/geo.vert", "assets/geo.frag");
+	ew::Shader litShader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader sphereShader = ew::Shader("assets/sphere.vert", "assets/sphere.frag");
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
 	ew::Transform monkeyTransform;
-	ew::Mesh light = ew::createSphere(0.5f, 4);
+	ew::Mesh sphereMesh = ew::Mesh(ew::createSphere(1.0f, 8));
 	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
 
 	//Culling
@@ -247,6 +271,12 @@ int main() {
 	framebuffer.intitialize();
 	fullscreen_quad.intitialize();
 
+	for (int i = 0; i < sqrt(maxLights); i++) {
+		for (int j = 0; j < sqrt(maxLights); j++) {
+			pointLights[i+j].initialize(i, j);
+		}
+	}
+
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
@@ -256,9 +286,9 @@ int main() {
 		cameraController.move(window, &camera, deltaTime);
 
 		//RENDER
-		render(litShader, monkeyTransform, suzanne, window, brickTexture);
-		renderLight(sphereShader, light);
-		postProcessing(geoShader, framebuffer);
+		render(geoShader, monkeyTransform, suzanne, window, brickTexture);
+		postProcessing(litShader, framebuffer);
+		renderLight(sphereShader, sphereMesh);
 
 		drawUI();
 

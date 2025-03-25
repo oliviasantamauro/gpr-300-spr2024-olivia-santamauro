@@ -2,11 +2,9 @@
 
 out vec4 FragColor;
 
-in vec3 WorldPos;
-
-uniform vec3 LightColor;
+uniform vec4 LightColor;
 
 void main()
 {
-	FragColor = vec4(LightColor, 1.0);
+	FragColor = vec4(LightColor);
 }
