@@ -2,9 +2,9 @@
 
 out vec4 FragColor;
 
-uniform vec4 LightColor;
+uniform vec4 _LightColor;
 
 void main()
 {
-	FragColor = vec4(LightColor);
+	FragColor = vec4(_LightColor);
 }

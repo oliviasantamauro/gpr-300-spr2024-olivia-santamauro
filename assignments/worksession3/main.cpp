@@ -36,7 +36,7 @@ ew::Camera camera;
 ew::CameraController cameraController;
 glm::vec4 bgColor = glm::vec4(0.8f, 0.6f, 1.0f, 1.0f);
 
-int count = 25;
+int count = 8;
 
 struct Material {
 	float Ka = 1.0;
@@ -57,7 +57,7 @@ struct PointLight {
 		color.g = (rand() % 256) / 255.0f;
 		color.b = (rand() % 256) / 255.0f;
 		color.a = 1.0f;
-		position = glm::vec3(2.0f * x, 5.0f, 2.0f * z);
+		position = glm::vec3(2.0f * x, 3.0f, 2.0f * z);
 	}
 } pointLights[maxLights];
 
@@ -235,7 +235,7 @@ void renderLight(ew::Shader& shader, ew::Mesh& light) {
 		m = glm::scale(m, glm::vec3(pointLights[i].radius));
 
 		shader.setMat4("_Model", m);
-		shader.setVec3("_LightColor", pointLights[i].color);
+		shader.setVec4("_LightColor", pointLights[i].color);
 		light.draw();
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -271,11 +271,14 @@ int main() {
 	framebuffer.intitialize();
 	fullscreen_quad.intitialize();
 
-	for (int i = 0; i < sqrt(maxLights); i++) {
-		for (int j = 0; j < sqrt(maxLights); j++) {
-			pointLights[i+j].initialize(i, j);
+	int lightIndex = 0;
+	for (int i = 0; i < count; i++) {
+		for (int j = 0; j < count; j++) {
+				pointLights[lightIndex].initialize(i, j);
+				lightIndex++;
 		}
 	}
+
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
