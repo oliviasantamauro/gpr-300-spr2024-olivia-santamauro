@@ -36,32 +36,38 @@ struct Material {
 	float Shininess = 128;
 }material;
 
+float roughness = 0.5f;
+float metallic = 0.5f;
+
 void render(ew::Shader shader, ew::Model model, GLuint texture, ew::Transform transform) {
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
-	glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
+		glEnable(GL_DEPTH_TEST);
 
-	glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glClearColor(bgColor.r, bgColor.g, bgColor.b, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texture);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, texture);
 
-	shader.use();
+		shader.use();
 
-	shader.setFloat("_Material.Ka", material.Ka);
-	shader.setFloat("_Material.Kd", material.Kd);
-	shader.setFloat("_Material.Ks", material.Ks);
-	shader.setFloat("_Material.Shininess", material.Shininess);
+		shader.setFloat("_Material.Ka", material.Ka);
+		shader.setFloat("_Material.Kd", material.Kd);
+		shader.setFloat("_Material.Ks", material.Ks);
+		shader.setFloat("_Material.Shininess", material.Shininess);
 
-	shader.setVec3("_EyePos", camera.position);
-	shader.setInt("_MainTex", 0);
-	shader.setMat4("model", transform.modelMatrix());
-	shader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
-	model.draw();
+		shader.setVec3("_EyePos", camera.position);
+		shader.setInt("_MainTex", 0);
+		shader.setMat4("model", transform.modelMatrix());
+		shader.setMat4("viewProjection", camera.projectionMatrix() * camera.viewMatrix());
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, 0);
+		shader.setFloat("roughness", roughness);
+		shader.setFloat("metallic", metallic);
+		model.draw();
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 int main() {
@@ -69,6 +75,7 @@ int main() {
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
 	ew::Shader litShader = ew::Shader("assets/lit.vert", "assets/lit.frag");
+	ew::Shader PBRshader = ew::Shader("assets/pbr.vert", "assets/pbr.frag");
 	ew::Model suzanne = ew::Model("assets/suzanne.obj");
 	ew::Transform monkeyTransform;
 
@@ -100,7 +107,7 @@ int main() {
 		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0, 1.0, 0.0));
 
 		//RENDER
-		render(litShader, suzanne, brickTexture, monkeyTransform);
+		render(PBRshader, suzanne, brickTexture, monkeyTransform);
 
 		drawUI();
 
@@ -120,7 +127,7 @@ void drawUI() {
 	ImGui_ImplGlfw_NewFrame();
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui::NewFrame();
-
+	
 
 	ImGui::Begin("Settings");
 	if (ImGui::CollapsingHeader("Camera")) {
@@ -136,6 +143,12 @@ void drawUI() {
 		ImGui::SliderFloat("SpecularK", &material.Ks, 0.0f, 1.0f);
 		ImGui::SliderFloat("Shininess", &material.Shininess, 2.0f, 1024.0f);
 	}
+
+	if (ImGui::CollapsingHeader("PBR")) {
+		ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f);
+		ImGui::SliderFloat("metallic", &metallic, 0.0f, 1.0f);
+	}
+
 	ImGui::End();
 
 	ImGui::Render();

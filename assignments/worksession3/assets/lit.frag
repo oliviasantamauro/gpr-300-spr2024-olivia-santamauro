@@ -25,7 +25,7 @@ uniform sampler2D _Coords;
 uniform sampler2D _Normals;
 uniform sampler2D _Albedo;
 uniform vec3 _EyePos;
-uniform PointLight _PointLights[625];
+uniform PointLight _PointLights[64];
 uniform vec3 LightDirection = vec3(0.0, -1.0, 0.0);
 
 out vec4 FragColor;
