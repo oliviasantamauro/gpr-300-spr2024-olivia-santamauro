@@ -32,10 +32,6 @@ float D() {
 	return (alpha2 / denom);
 }
 
-vec3 F() {
-	return vec3(1.0);
-}
-
 float GeometrySchlickGGX(float k)
 {
     float nom   = NdotV;
@@ -54,7 +50,7 @@ float G(float k)
 
 vec3 CookTorrence(vec3 Fresnel) {
 
-	vec3 num = D() * Fresnel * G(0.5);
+	vec3 num = D() * Fresnel * G(1.0);
 	float denom = 4.0 * VdotN * LdotN;
 	return num / denom;
 }
